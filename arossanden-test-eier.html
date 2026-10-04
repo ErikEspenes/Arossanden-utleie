@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Årossanden utleie (test)</title>
+<meta property="og:title" content="Årossanden – registrer utleie">
+<meta property="og:description" content="Trykk her for å registrere utleie for din hytte.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏖️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<script>
+// ===== TESTVERSJON: etterligner Supabase, lagrer kun i denne nettleseren =====
+(function(){
+  window.__DEMO = true;
+  const KEY="arossanden-demo-v2";
+  function seed(){ return {utleie:[], laaste_perioder:[]}; }
+  let db; try{ db=JSON.parse(localStorage.getItem(KEY)); }catch(e){}
+  if(!db) db=seed();
+  db.bekreftelser = db.bekreftelser || [];
+  db.frister = db.frister || [];
+  db.eiere = [{enhet:5, navn:"Jorna Johnsen og Erik Espenes"}];
+  const save=()=>{ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){} };
+  const periode=uke=>{ const [y,w]=uke.split("-").map(Number); const d=new Date(Date.UTC(y,0,4));
+    d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7)+7*(w-1)+3); return y+"-H"+(d.getUTCMonth()<=5?1:2); };
+  const laast=r=>db.laaste_perioder.some(p=>p.periode===(r.periode||periode(r.uke)));
+  const bekr=r=>r.uke&&db.bekreftelser.some(b=>b.enhet===r.enhet&&b.periode===periode(r.uke));
+  const rls={message:"new row violates row-level security policy", code:"42501"};
+  function q(table){
+    const st={op:"select",f:[],range:null,row:null};
+    const api={
+      select(){return api;}, like(c,v){const p=v.replace("%","");st.f.push(r=>String(r[c]).startsWith(p));return api;},
+      eq(c,v){st.f.push(r=>r[c]===v);return api;}, range(a,b){st.range=[a,b];return api;},
+      insert(row){st.op="insert";st.row=row;return api;}, delete(){st.op="delete";return api;},
+      then(res,rej){ return Promise.resolve(run()).then(res,rej); }
+    };
+    function run(){
+      const rows=db[table];
+      if(st.op==="insert"){ if(st.row.periode){ const [y,h]=st.row.periode.split("-"); const ap=h==="H1"?new Date(+y,6,1):new Date(+y+1,0,1); if(new Date()<ap) return {data:null,error:rls}; }
+        if(laast(st.row)||bekr(st.row)||(st.row.uke&&st.row.uke<"2026-01")) return {data:null,error:rls};
+        if(rows.some(r=>r.enhet===st.row.enhet&&(r.uke||r.periode)===(st.row.uke||st.row.periode))) return {data:null,error:{code:"23505",message:"duplicate"}};
+        rows.push({...st.row, ...(table==="bekreftelser"?{bekreftet:new Date().toISOString()}:{})}); save(); return {data:null,error:null}; }
+      const hit=rows.filter(r=>st.f.every(f=>f(r)));
+      if(st.op==="delete"){ if(table==="bekreftelser"||hit.some(r=>laast(r)||bekr(r))) return {data:null,error:rls};
+        db[table]=rows.filter(r=>!hit.includes(r)); save(); return {data:null,error:null}; }
+      const out=st.range?hit.slice(st.range[0],st.range[1]+1):hit;
+      return {data:out.map(r=>({...r})),error:null};
+    }
+    return api;
+  }
+  window.supabase={createClient:()=>({ from:q, rpc:async(fn,a)=>{
+    if(fn==="admin_ok") return {data:true,error:null};
+    if(fn==="sett_frist"){ db.frister=db.frister.filter(p=>p.periode!==a.p_periode);
+      if(a.p_frist) db.frister.push({periode:a.p_periode,frist:a.p_frist}); save(); return {data:true,error:null}; }
+    if(fn==="angre_bekreftelse"){ db.bekreftelser=db.bekreftelser.filter(b=>!(b.enhet===a.p_enhet&&b.periode===a.p_periode)); save(); return {data:true,error:null}; }
+    if(fn==="sett_laas"){ db.laaste_perioder=db.laaste_perioder.filter(p=>p.periode!==a.p_periode);
+      if(a.p_laast) db.laaste_perioder.push({periode:a.p_periode}); save(); return {data:true,error:null}; }
+    return {data:null,error:{message:"ukjent funksjon"}};
+  }})};
+  window.__demoReset=()=>{ try{localStorage.removeItem(KEY);}catch(e){} location.reload(); };
+})();
+</script>
+<style>
+:root{
+  --bg:#EEF3F4;--surface:#FFFFFF;--ink:#13303F;--muted:#4F6672;--line:#C9D6DB;
+  --sea:#1F6A8A;--sea-ink:#FFFFFF;--sun:#F0B429;--sun-ink:#13303F;--sun-soft:#FCEFC7;
+  --go:#1E7A47;--go-ink:#FFFFFF;--go-soft:#E2F3E9;--warn:#B23A25;--warn-soft:#FBE7E3;--focus:#1F6A8A;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0E1B22;--surface:#16262F;--ink:#E9F0F3;--muted:#A3B6BF;--line:#2E434E;
+  --sea:#5BAAD0;--sea-ink:#0E1B22;--sun:#F5C451;--sun-ink:#0E1B22;--sun-soft:#3A3320;
+  --go:#6CC191;--go-ink:#0E1B22;--go-soft:#173326;--warn:#F08A73;--warn-soft:#3A1F1A;--focus:#8FC6E0;
+}}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 18px/1.5 "Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif}
+h1,h2,h3,h4{font-family:"Bricolage Grotesque","Source Sans 3",system-ui,sans-serif;line-height:1.15;margin:0}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+.wrap{max-width:820px;margin:0 auto;padding:16px 14px 60px}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+header.top h1{font-size:1.5rem;font-weight:800}
+.adm{font-size:.8rem;font-weight:700;padding:4px 10px;border-radius:999px;background:var(--ink);color:var(--bg)}
+.banner{border-radius:12px;padding:12px 14px;margin-bottom:14px;border:2px solid var(--warn);color:var(--warn);background:var(--warn-soft)}
+.banner.demo{border-color:var(--sea);color:var(--ink);background:var(--surface)}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px}
+.tabs button{border:2px solid var(--line);background:var(--surface);padding:10px 4px;border-radius:12px;cursor:pointer;font-weight:700;font-size:1rem;line-height:1.2;min-height:56px}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tabs small{display:block;font-weight:400;font-size:.78rem;opacity:.8}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px}
+.center{text-align:center}
+.step{display:inline-block;font-weight:700;font-size:.9rem;padding:4px 12px;border-radius:999px;background:var(--sea);color:var(--sea-ink);margin:0 0 10px}
+.big{font-size:clamp(1.6rem,6vw,2.1rem);font-weight:800}
+.lead{font-size:1.1rem;color:var(--muted);margin:8px 0 18px}
+.muted{color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;background:var(--ink);color:var(--bg);padding:12px 18px;min-height:52px;border-radius:12px;font-weight:700;font-size:1.05rem;cursor:pointer;text-align:center}
+.btn.xl{width:100%;min-height:66px;font-size:1.25rem;border-radius:14px;margin-top:12px}
+.btn.green{background:var(--go);color:var(--go-ink)}
+.btn.ghost{background:transparent;color:var(--ink);border:2px solid var(--line)}
+.btn.warn{background:transparent;color:var(--warn);border:2px solid var(--warn)}
+.btn.sm{min-height:44px;padding:8px 12px;font-size:.95rem}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.linkbtn{border:0;background:none;color:var(--sea);text-decoration:underline;cursor:pointer;padding:6px 0;font-weight:600}
+.unitgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}
+.unitbtn{border:2px solid var(--line);background:var(--surface);border-radius:14px;padding:12px 6px;min-height:84px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.unitbtn b{font:800 1.7rem "Bricolage Grotesque",sans-serif}
+.unitbtn span{font-size:.78rem;color:var(--muted);line-height:1.2}
+.unitbtn:hover{border-color:var(--sea)}
+.unitcard{border:3px solid var(--sea);border-radius:16px;padding:20px;margin:16px 0 4px}
+.unitcard b{display:block;font:800 2.4rem "Bricolage Grotesque",sans-serif}
+.unitcard span{font-size:1.2rem;font-weight:600}
+.unithead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.unithead p{margin:0}
+.owner{font-weight:700;color:var(--sea);font-size:1.1rem}
+.howto{background:var(--bg);border-radius:14px;padding:14px 16px;margin-bottom:16px}
+.howto h3{font-size:1.15rem;margin-bottom:8px}
+.howto ol{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.howto li{display:flex;gap:12px;align-items:flex-start}
+.howto li i{flex:0 0 32px;height:32px;border-radius:50%;background:var(--sea);color:var(--sea-ink);font:800 1rem/32px "Bricolage Grotesque",sans-serif;text-align:center;font-style:normal}
+.alert{border-radius:14px;padding:14px 16px;margin-bottom:16px;border:2px solid var(--warn);background:var(--warn-soft)}
+.alert p{margin:0 0 8px;font-weight:600}
+.alert .row{gap:8px}
+.halfswitch{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.halfswitch button{border:2px solid var(--line);background:var(--surface);border-radius:14px;padding:12px 8px;cursor:pointer;text-align:center;min-height:76px}
+.halfswitch button b{display:block;font:800 1.15rem "Bricolage Grotesque",sans-serif}
+.halfswitch button span{display:block;font-size:.85rem;color:var(--muted)}
+.halfswitch button em{display:block;font-style:normal;font-size:.85rem;font-weight:700;margin-top:2px}
+.halfswitch button[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 2px var(--ink)}
+.halfswitch em.ok{color:var(--go)} .halfswitch em.miss{color:var(--warn)}
+.yearmini{display:flex;align-items:center;justify-content:center;gap:14px;margin:4px 0 14px}
+.yearmini b{font:800 1.3rem "Bricolage Grotesque",sans-serif}
+.iconbtn{border:2px solid var(--line);background:var(--surface);width:46px;height:46px;border-radius:50%;cursor:pointer;font-size:1.3rem;font-weight:700}
+.iconbtn[disabled]{opacity:.3;cursor:not-allowed}
+.halfsum{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;padding:12px 14px;border-radius:12px;background:var(--bg);margin-bottom:6px;font-weight:600}
+.month{padding:14px 0 6px}
+.month h3{font-size:1.25rem;display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
+.month h3 small{font:600 .85rem "Source Sans 3",sans-serif;color:var(--muted)}
+.month h3 small.hi{color:var(--sun-ink);background:var(--sun);padding:2px 8px;border-radius:999px}
+.weeks{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.wk{border:2px solid var(--line);background:var(--surface);border-radius:14px;padding:10px 12px;text-align:left;cursor:pointer;min-height:92px;display:flex;flex-direction:column;gap:2px}
+.wk .wn{font:800 1.25rem "Bricolage Grotesque",sans-serif}
+.wk .wd{font-size:.85rem;color:var(--muted)}
+.wk .ws{margin-top:auto;font-size:.9rem;font-weight:700;color:var(--muted)}
+.wk.now{border-style:dashed;border-color:var(--ink)}
+.wk.on{background:var(--sea);border-color:var(--sea);color:var(--sea-ink)}
+.wk.on.high{background:var(--sun);border-color:var(--sun);color:var(--sun-ink)}
+.wk.on .wd,.wk.on .ws{color:inherit}
+.wk.closed{opacity:.55;cursor:not-allowed}
+.hbox{margin-top:20px;padding:18px;border-radius:16px;border:3px solid var(--line)}
+.hbox.open{border-color:var(--go);background:var(--go-soft)}
+.hbox.ok{border-color:var(--go)}
+.hbox.wait{border-style:dashed}
+.hbox.late{border-color:var(--warn)}
+.hbox h4{font-size:1.3rem;margin-bottom:8px}
+.hbox p{margin:0 0 10px}
+.hbox .late{color:var(--warn)}
+.legend{display:flex;gap:10px 16px;flex-wrap:wrap;color:var(--muted);font-size:.9rem;margin-top:16px}
+.legend i{display:inline-block;width:16px;height:16px;border-radius:4px;vertical-align:-3px;margin-right:6px}
+.intro{margin:0 0 14px;color:var(--muted)}
+.scards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.scard{padding:14px;border-radius:14px;border:2px solid var(--sea);background:var(--bg)}
+.scard.ok{border-color:var(--go)} .scard.late{border-color:var(--warn)} .scard.wait{border:2px dashed var(--line);background:transparent}
+.scard h3{font-size:1.15rem;margin-bottom:6px}
+.scard p{margin:4px 0;font-size:.95rem;color:var(--muted)}
+.scard p.bigp{font-size:1.05rem;color:var(--ink)}
+.scard p.bigp b{font:800 1.8rem "Bricolage Grotesque",sans-serif}
+.scard p.miss{color:var(--warn)} .scard p.okt{color:var(--go)}
+.progress{height:10px;border-radius:999px;background:var(--line);overflow:hidden;margin:6px 0 2px}
+.progress i{display:block;height:100%;background:var(--go)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px}
+.tile{border:2px solid var(--go);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.tile.miss{border-color:var(--warn);background:var(--warn-soft)}
+.tile b{font:800 1.2rem "Bricolage Grotesque",sans-serif}
+.m{font-size:.78rem;font-weight:700;padding:1px 7px;border-radius:999px}
+.m.ok{color:var(--go);border:1px solid var(--go)} .m.miss{color:var(--warn);border:1px solid var(--warn)} .m.wait{color:var(--muted);border:1px dashed var(--line)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+select,input[type=date]{padding:10px 12px;border-radius:12px;border:2px solid var(--line);background:var(--surface);color:var(--ink);min-height:48px}
+.scroll{overflow-x:auto;margin-top:14px}
+table{border-collapse:collapse;width:100%;font-size:.95rem}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.click{cursor:pointer}
+tr.click:hover td,tr.open td{background:var(--bg)}
+tr.detail td{white-space:normal;background:var(--bg);font-size:.92rem;color:var(--muted)}
+tfoot td{font-weight:700;border-bottom:0}
+.tag{font-size:.8rem;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.tag.ok{border-color:var(--go);color:var(--go)} .tag.warn{border-color:var(--warn);color:var(--warn)}
+.tag.late{background:var(--warn);color:var(--surface);border-color:var(--warn)}
+.status{white-space:pre-line;font-size:.92rem;color:var(--muted);min-height:1.3em;margin-top:10px}
+.status.err{color:var(--warn)}
+.adminbox{margin-top:16px;padding:16px;border-radius:14px;border:2px dashed var(--sea)}
+.adminbox h3{font-size:1.1rem;margin-bottom:10px}
+.lockbar{display:flex;gap:8px;flex-wrap:wrap}
+.lockbar span{font-size:.88rem;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.lockbar span.on{border-color:var(--warn);color:var(--warn)}
+#toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);width:min(92vw,480px);
+  background:var(--ink);color:var(--bg);padding:16px 18px;border-radius:14px;font-weight:700;font-size:1.05rem;box-shadow:0 10px 28px rgba(0,0,0,.3);
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:10}
+#toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#toast.ok{background:var(--go);color:var(--go-ink)}
+#toast.warn{background:var(--warn);color:var(--surface)}
+@media (max-width:640px){
+  .ukecol{display:none}
+  th,td{padding:8px 5px}
+  .wrap{padding:12px 10px 60px}
+  .panel{padding:16px 12px}
+  .scards{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p>Laster …</p></div>
+<script>
+// ================= KONFIGURASJON (fyll inn) =================
+const SUPABASE_URL      = "https://DITT-PROSJEKT.supabase.co";
+const SUPABASE_ANON_KEY = "DIN-ANON-KEY";
+const ANTALL_ENHETER    = 47;
+const PRIS_LAV = 250, PRIS_HOY = 750;
+const HOY_MND  = [5, 6, 7];   // juni, juli, august
+const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
+// ============================================================
+
+(() => {
+  const DEMO = !!window.__DEMO;
+  const MND = ["Januar","Februar","Mars","April","Mai","Juni","Juli","August","September","Oktober","November","Desember"];
+  const MND_K = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","des"];
+  const HALV = { H1:"1. halvår", H2:"2. halvår" };
+  const HALV_MND = { H1:"januar – juni", H2:"juli – desember" };
+  const kr = n => n.toLocaleString("nb-NO") + " kr";
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const dato = d => new Date(String(d).length === 10 ? d + "T12:00:00" : d).toLocaleDateString("nb-NO", {day:"2-digit", month:"2-digit", year:"numeric"});
+  const app = document.getElementById("app");
+
+  if (!window.supabase || (!DEMO && SUPABASE_URL.includes("DITT-PROSJEKT"))){
+    app.innerHTML = `<div class="banner">Appen er ikke konfigurert. Fyll inn SUPABASE_URL og SUPABASE_ANON_KEY øverst i index.html.</div>`;
+    return;
+  }
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth:{ persistSession:false } });
+  const adminKey = DEMO ? "demo" : new URLSearchParams(location.search).get("admin");
+
+  // ---------- Uker (ISO). Uka hører til måneden torsdagen faller i ----------
+  function weeksInYear(y){ const j = new Date(Date.UTC(y,0,1)).getUTCDay(); const leap = (y%4===0 && y%100!==0) || y%400===0; return (j===4 || (leap && j===3)) ? 53 : 52; }
+  function week1Monday(y){ const d = new Date(Date.UTC(y,0,4)); d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7)); return d; }
+  const cache = {};
+  function weeksOf(y){
+    if (cache[y]) return cache[y];
+    const m1 = week1Monday(y), out = [];
+    for (let w=1; w<=weeksInYear(y); w++){
+      const mon = new Date(m1); mon.setUTCDate(m1.getUTCDate()+7*(w-1));
+      const thu = new Date(mon); thu.setUTCDate(mon.getUTCDate()+3);
+      const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate()+6);
+      const month = thu.getUTCMonth();
+      out.push({ key:`${y}-${String(w).padStart(2,"0")}`, w, month, high:HOY_MND.includes(month), periode:`${y}-H${month<=5?1:2}`,
+        label:`${mon.getUTCDate()}. ${MND_K[mon.getUTCMonth()]} – ${sun.getUTCDate()}. ${MND_K[sun.getUTCMonth()]}` });
+    }
+    return (cache[y] = out);
+  }
+  const infoFor = key => { const [y,w] = key.split("-").map(Number); return weeksOf(y)[w-1]; };
+  function currentKey(){
+    const t = new Date(), d = new Date(Date.UTC(t.getFullYear(),t.getMonth(),t.getDate()));
+    d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7)+3);
+    const y = d.getUTCFullYear(), w = 1+Math.round((d-week1Monday(y)-3*864e5)/6048e5);
+    return `${y}-${String(w).padStart(2,"0")}`;
+  }
+  function sum(keys, filter){
+    let lav=0, hoy=0;
+    for (const k of keys){ const i = infoFor(k); if (!i || (filter && !filter(i))) continue; i.high ? hoy++ : lav++; }
+    return { lav, hoy, krLav:lav*PRIS_LAV, krHoy:hoy*PRIS_HOY, total:lav*PRIS_LAV+hoy*PRIS_HOY };
+  }
+
+  // ---------- Tilstand ----------
+  const iDag = new Date(), naaAar = Math.max(iDag.getFullYear(), FORSTE_AAR), naaHalv = iDag.getMonth() <= 5 ? "H1" : "H2";
+  function lagretEnhet(){ try { return Number(localStorage.getItem("arossanden-enhet")) || null; } catch(e){ return null; } }
+  const S = { loading:true, admin:false, tab:"min", enhet:lagretEnhet(), kandidat:null, year:naaAar, half:naaHalv,
+    rader:[], laast:new Set(), bekr:new Map(), frister:new Map(), navn:new Map(),
+    period:iDag.getMonth()>=6 ? "H1" : "H2", aapen:null, bekreftSteg:null, status:"", err:false };
+  const setStatus = (m, err=false) => { S.status = m; S.err = err; };
+
+  async function hentAlle(q){
+    const out = []; let from = 0;
+    for (;;){ const { data, error } = await q().range(from, from+999); if (error) throw error; out.push(...data); if (data.length < 1000) break; from += 1000; }
+    return out;
+  }
+  async function lastData(){
+    const [u, l, b, fr, ei] = await Promise.all([
+      hentAlle(() => sb.from("utleie").select("enhet,uke").like("uke", `${S.year}-%`)),
+      sb.from("laaste_perioder").select("periode"),
+      hentAlle(() => sb.from("bekreftelser").select("enhet,periode,bekreftet")),
+      sb.from("frister").select("periode,frist"),
+      sb.from("eiere").select("enhet,navn")
+    ]);
+    for (const r of [l, fr, ei]) if (r.error) throw r.error;
+    S.rader = u;
+    S.laast = new Set(l.data.map(x => x.periode));
+    S.bekr = new Map(b.map(x => [`${x.enhet}|${x.periode}`, x.bekreftet]));
+    S.frister = new Map(fr.data.map(x => [x.periode, x.frist]));
+    S.navn = new Map(ei.data.filter(x => x.navn).map(x => [x.enhet, x.navn]));
+  }
+  async function oppdater(){
+    try { await lastData(); } catch(e){ setStatus("Kunne ikke hente data: " + e.message, true); }
+    S.loading = false; render();
+  }
+
+  // ---------- Hjelpere ----------
+  const ukerFor = n => new Set(S.rader.filter(r => r.enhet === n).map(r => r.uke));
+  const navnFor = n => S.navn.get(n) || "";
+  const bekreftet = (n, per) => S.bekr.get(`${n}|${per}`);
+  const fristFor = per => S.frister.get(per);
+  const fristPassert = per => { const f = fristFor(per); return !!f && new Date(f + "T23:59:59") < new Date(); };
+  const aapnerDato = per => { const [y,h] = per.split("-"); return h === "H1" ? `${y}-07-01` : `${Number(y)+1}-01-01`; };
+  const kanBekrefte = per => new Date() >= new Date(aapnerDato(per) + "T00:00:00");
+  const antallI = (n, per) => [...ukerFor(n)].filter(k => infoFor(k).periode === per).length;
+  const ukerTxt = a => `${a} ${a === 1 ? "uke" : "uker"}`;
+  function mangler(n){ // halvår som er over, ikke bekreftet og ikke låst
+    const out = [];
+    for (let y = FORSTE_AAR; y <= naaAar; y++) for (const h of ["H1","H2"]){
+      const per = `${y}-${h}`;
+      if (kanBekrefte(per) && !bekreftet(n, per) && !S.laast.has(per)) out.push({ y, h, per });
+    }
+    return out;
+  }
+  let toastTimer = null;
+  function toast(msg, type=""){
+    let el = document.getElementById("toast");
+    if (!el){ el = document.createElement("div"); el.id = "toast"; el.setAttribute("role", "alert"); document.body.appendChild(el); }
+    el.textContent = msg; el.className = "show " + type;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.className = type; }, 5000);
+  }
+  async function gaaTil(y, h){
+    S.half = h;
+    if (y !== S.year){ S.year = y; S.loading = true; render(); await oppdater(); } else render();
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- Visning: felles ----------
+  function header(){
+    const demo = DEMO ? `<div class="banner demo"><b>Testversjon.</b> Det du registrerer lagres bare på din egen telefon og vises ikke for andre.
+      <div class="row" style="margin-top:4px"><button class="linkbtn" data-act="nullstill">Start testen på nytt</button></div></div>` : "";
+    const ugyldig = adminKey && !DEMO && !S.admin && !S.loading ? `<div class="banner">Admin-lenken er ikke gyldig. Du ser vanlig visning.</div>` : "";
+    const tab = (id, t, sub) => `<button role="tab" data-tab="${id}" aria-selected="${S.tab===id}">${t}<small>${sub}</small></button>`;
+    return `<header class="top"><h1>Årossanden utleie</h1>${S.admin ? `<span class="adm">Styret</span>` : ""}</header>${demo}${ugyldig}
+      <nav class="tabs" role="tablist">${tab("min","🏠 Min hytte","registrer her")}${tab("status","✅ Status","alle enheter")}${tab("over","📋 Oversikt","uker og beløp")}</nav>`;
+  }
+  const statusEl = () => `<div class="status${S.err?" err":""}" aria-live="polite">${esc(S.status)}</div>`;
+  const yearbar = () => `<div class="yearmini"><button class="iconbtn" data-year="-1" aria-label="Forrige år" ${S.year<=FORSTE_AAR?"disabled":""}>‹</button>
+      <b>${S.year}</b><button class="iconbtn" data-year="1" aria-label="Neste år">›</button></div>`;
+
+  // ---------- Min hytte: velg enhet ----------
+  function velgView(){
+    const knapper = Array.from({length:ANTALL_ENHETER}, (_,i) => { const n = i+1;
+      return `<button class="unitbtn" data-pick="${n}" aria-label="Enhet ${n}${navnFor(n) ? ", " + esc(navnFor(n)) : ""}"><b>${n}</b>${navnFor(n) ? `<span>${esc(navnFor(n))}</span>` : ""}</button>`; }).join("");
+    return `<div class="panel">
+      <div class="center"><span class="step">Steg 1 av 2</span>
+      <h2 class="big">Trykk på nummeret til din hytte</h2>
+      <p class="lead">Du gjør dette bare én gang. Telefonen husker valget ditt.</p></div>
+      <div class="unitgrid">${knapper}</div></div>`;
+  }
+  function bekreftEnhetView(){
+    const n = S.kandidat;
+    return `<div class="panel center">
+      <span class="step">Steg 2 av 2</span>
+      <h2 class="big">Er dette din hytte?</h2>
+      <div class="unitcard"><b>Enhet ${n}</b>${navnFor(n) ? `<span>${esc(navnFor(n))}</span>` : ""}</div>
+      <button class="btn xl green" data-act="velg">✓ Ja, dette er min hytte</button>
+      <button class="btn xl ghost" data-act="tilbake">✗ Nei, velg en annen</button></div>`;
+  }
+
+  // ---------- Min hytte: registrering ----------
+  function bekreftBoks(n, h){
+    const per = `${S.year}-${h}`, b = bekreftet(n, per), l = S.laast.has(per), a = antallI(n, per);
+    const hva = a ? `Du har registrert <b>${ukerTxt(a)}</b> utleie i ${HALV[h]}.` : `Du har <b>ingen utleie</b> registrert i ${HALV[h]}.`;
+    if (b) return `<div class="hbox ok" id="bekreft"><h4>✓ ${HALV[h]} ${S.year} er bekreftet</h4>
+      <p>${hva} Bekreftet ${dato(b)}.</p>
+      <p><b>🔒 Halvåret er lukket for endringer.</b> Mener du noe er feil, kontakt styret eller regnskapsfører.</p>
+      ${S.admin && !l ? `<button class="btn warn" data-act="angre" data-per="${per}">Åpne halvåret for endring (styret)</button>` : ""}</div>`;
+    if (l) return `<div class="hbox late" id="bekreft"><h4>${HALV[h]} ${S.year} ble ikke bekreftet</h4><p>Halvåret er låst. Kontakt styret.</p></div>`;
+    if (!kanBekrefte(per)) return `<div class="hbox wait" id="bekreft"><h4>Bekreft ${HALV[h]} ${S.year}</h4>
+      <p>${hva}</p><p>Halvåret er ikke over ennå. Fortsett å registrere uker. <b>Du kan bekrefte fra ${dato(aapnerDato(per))}.</b></p>
+      <button class="btn xl" disabled>Bekreftelse åpner ${dato(aapnerDato(per))}</button></div>`;
+    const frist = fristFor(per) ? `<p class="${fristPassert(per) ? "late" : ""}"><b>Frist: ${dato(fristFor(per))}${fristPassert(per) ? " (passert)" : ""}</b></p>` : "";
+    if (S.bekreftSteg === per) return `<div class="hbox open" id="bekreft"><h4>Er du sikker?</h4>
+      <p>${hva}</p><p class="late"><b>Etter bekreftelse kan du ikke endre ukene i ${HALV[h]}.</b></p>
+      <button class="btn xl green" data-act="bekreft" data-per="${per}">✓ Ja, bekreft ${a ? ukerTxt(a) : "ingen utleie"}</button>
+      <button class="btn xl ghost" data-act="avbryt">Avbryt, jeg vil sjekke igjen</button></div>`;
+    return `<div class="hbox open" id="bekreft"><h4>Siste steg: bekreft ${HALV[h]} ${S.year}</h4>${frist}
+      <p>${hva}</p><p>Sjekk at alle utleide uker over er fargelagt. Trykk deretter den grønne knappen.</p>
+      <button class="btn xl green" data-act="steg" data-per="${per}">${a ? `Bekreft ${HALV[h]}: ${ukerTxt(a)}` : `Bekreft: ingen utleie i ${HALV[h]}`}</button></div>`;
+  }
+
+  function minHytteView(){
+    const n = S.enhet, uker = ukerFor(n), per = `${S.year}-${S.half}`;
+    const now = currentKey(), weeks = weeksOf(S.year);
+    const ms = S.half === "H1" ? [0,1,2,3,4,5] : [6,7,8,9,10,11];
+    const t = sum([...uker], i => i.periode === per);
+    const manglerListe = mangler(n);
+    const varsel = manglerListe.length ? `<div class="alert">
+      <p>⚠ Du har ${manglerListe.length === 1 ? "et halvår" : "halvår"} som må bekreftes:</p>
+      <div class="row">${manglerListe.map(x => `<button class="btn sm" data-goto="${x.y}-${x.h}">${HALV[x.h]} ${x.y}${fristFor(x.per) ? ` · frist ${dato(fristFor(x.per))}` : ""}</button>`).join("")}</div></div>` : "";
+    const halvKnapp = h => { const p = `${S.year}-${h}`, b = bekreftet(n, p);
+      const st = b ? `<em class="ok">✓ Bekreftet</em>` : kanBekrefte(p) && !S.laast.has(p) ? `<em class="miss">Må bekreftes</em>` : S.laast.has(p) ? `<em>🔒 Låst</em>` : `<em>Pågår</em>`;
+      return `<button data-half="${h}" aria-pressed="${S.half===h}"><b>${HALV[h]}</b><span>${HALV_MND[h]}</span>${st}</button>`; };
+    const maaned = m => `<section class="month"><h3>${MND[m]}${HOY_MND.includes(m) ? `<small class="hi">Høysesong · ${PRIS_HOY} kr/uke</small>` : `<small>Lavsesong · ${PRIS_LAV} kr/uke</small>`}</h3>
+      <div class="weeks">${weeks.filter(w => w.month === m).map(w => {
+        const on = uker.has(w.key), closed = S.laast.has(w.periode) || !!bekreftet(n, w.periode);
+        return `<button class="wk${on?" on":""}${w.high?" high":""}${w.key===now?" now":""}${closed?" closed":""}" data-wk="${w.key}" aria-pressed="${on}" ${closed?'aria-disabled="true"':""}
+          aria-label="Uke ${w.w}, ${w.label}, ${on ? "utleid" : "ikke utleid"}${closed ? ", lukket" : ""}">
+          <span class="wn">Uke ${w.w}</span><span class="wd">${w.label}</span>
+          <span class="ws">${closed ? (on ? "✓ Utleid 🔒" : "🔒 Lukket") : on ? "✓ Utleid" : "Ikke utleid"}</span></button>`; }).join("")}</div></section>`;
+    return `<div class="panel">
+      <div class="unithead"><div><p class="muted">Du registrerer for</p><h2 class="big">Enhet ${n}</h2>${navnFor(n) ? `<p class="owner">${esc(navnFor(n))}</p>` : ""}</div>
+        <button class="btn ghost sm" data-act="bytt">Ikke din hytte? Bytt</button></div>
+      ${varsel}
+      <div class="howto"><h3>Slik gjør du det</h3><ol>
+        <li><i>1</i><span>Trykk på hver uke hytta har vært <b>utleid</b>. Uka blir farget og <b>lagres automatisk</b>.</span></li>
+        <li><i>2</i><span>Trykket feil? Trykk på uka <b>en gang til</b>, så fjernes den.</span></li>
+        <li><i>3</i><span>Når halvåret er over: trykk den <b>grønne knappen</b> nederst for å bekrefte.</span></li></ol>
+        <p class="muted" style="margin:10px 0 0;font-size:.9rem">Leid ut én dag eller hele uka? Det teller som én uke.</p></div>
+      <div class="halfswitch">${halvKnapp("H1")}${halvKnapp("H2")}</div>
+      ${yearbar()}
+      <div class="halfsum"><span>Utleid ${HALV[S.half]} ${S.year}: ${ukerTxt(t.lav + t.hoy)}</span><span>${kr(t.total)}</span></div>
+      ${ms.map(maaned).join("")}
+      ${bekreftBoks(n, S.half)}
+      <div class="legend"><span><i style="background:var(--sea)"></i>Utleid lavsesong</span><span><i style="background:var(--sun)"></i>Utleid høysesong</span><span>Stiplet ramme: denne uka</span></div>
+      ${statusEl()}</div>`;
+  }
+
+  // ---------- Status ----------
+  function statusView(){
+    const halv = ["H1","H2"].map(h => { const per = `${S.year}-${h}`, ok = [], miss = [];
+      for (let n=1; n<=ANTALL_ENHETER; n++) (bekreftet(n, per) ? ok : miss).push(n);
+      return { h, per, open:kanBekrefte(per), ok, miss }; });
+    const kort = x => `<div class="scard ${!x.open ? "wait" : x.miss.length ? (fristPassert(x.per) ? "late" : "") : "ok"}">
+      <h3>${HALV[x.h]} ${S.year}</h3>
+      ${x.open ? `<p class="bigp"><b>${x.ok.length}</b> av ${ANTALL_ENHETER} har bekreftet</p>
+        <div class="progress"><i style="width:${Math.round(x.ok.length/ANTALL_ENHETER*100)}%"></i></div>
+        <p>${fristFor(x.per) ? `Frist ${dato(fristFor(x.per))}${fristPassert(x.per) ? " (passert)" : ""}` : "Frist ikke satt"}${S.laast.has(x.per) ? " · låst 🔒" : ""}</p>
+        ${x.miss.length ? `<p class="miss"><b>Mangler (${x.miss.length}):</b> ${x.miss.join(", ")}</p>` : `<p class="okt"><b>Alle enheter har bekreftet ✓</b></p>`}`
+      : `<p>Kan bekreftes fra ${dato(aapnerDato(x.per))}${fristFor(x.per) ? `, frist ${dato(fristFor(x.per))}` : ""}.</p>`}</div>`;
+    const merke = (n, x) => !x.open ? `<span class="m wait">${x.h}</span>` : bekreftet(n, x.per) ? `<span class="m ok">${x.h} ✓</span>` : `<span class="m miss">${x.h} ✗</span>`;
+    const tiles = Array.from({length:ANTALL_ENHETER}, (_,i) => { const n = i+1;
+      return `<div class="tile ${halv.some(x => x.open && !bekreftet(n, x.per)) ? "miss" : ""}"><b>${n}</b>${halv.map(x => merke(n, x)).join("")}</div>`; }).join("");
+    return `<div class="panel">${yearbar()}
+      <p class="intro">Hvem har bekreftet utleien sin? Synlig for alle i sameiet.</p>
+      <div class="scards">${halv.map(kort).join("")}</div>
+      <div class="tiles">${tiles}</div>
+      <div class="legend"><span>✓ Bekreftet</span><span>✗ Mangler</span><span>Grå: halvåret er ikke over</span></div></div>`;
+  }
+
+  // ---------- Oversikt ----------
+  const PERIODER = { H1:{navn:"1. halvår",f:i=>i.month<=5}, H2:{navn:"2. halvår",f:i=>i.month>=6}, aar:{navn:"Hele året",f:()=>true} };
+  function unitRows(){
+    const f = PERIODER[S.period].f, rows = [];
+    for (let n=1; n<=ANTALL_ENHETER; n++){
+      const keys = [...ukerFor(n)];
+      const weeks = keys.filter(k => { const i = infoFor(k); return i && f(i); }).sort().map(k => Number(k.split("-")[1]));
+      const b1 = bekreftet(n, `${S.year}-H1`), b2 = bekreftet(n, `${S.year}-H2`);
+      const ok = S.period === "H1" ? !!b1 : S.period === "H2" ? !!b2 : (!!b1 && !!b2);
+      rows.push({ n, ...sum(keys, f), weeks, b1, b2, ok });
+    }
+    return rows;
+  }
+  function oversiktView(){
+    const rows = unitRows();
+    const t = rows.reduce((a,r)=>({lav:a.lav+r.lav,hoy:a.hoy+r.hoy,total:a.total+r.total}),{lav:0,hoy:0,total:0});
+    const per = S.period !== "aar" ? `${S.year}-${S.period}` : null, erLaast = per && S.laast.has(per);
+    const antOk = rows.filter(r => r.ok).length;
+    const statusCell = r => S.period === "aar"
+      ? `<td>${["H1","H2"].map(h => { const p = `${S.year}-${h}`, b = h === "H1" ? r.b1 : r.b2;
+          return b ? `<span class="tag ok">${h} ✓</span>` : !kanBekrefte(p) ? `<span class="tag">${h} –</span>` : `<span class="tag ${fristPassert(p) ? "late" : "warn"}">${h} ✗</span>`; }).join(" ")}</td>`
+      : !kanBekrefte(per) && !r.ok ? `<td><span class="tag">Ikke over</span></td>`
+      : `<td>${r.ok ? '<span class="tag ok">Bekreftet ✓</span>' : `<span class="tag ${fristPassert(per) ? "late" : "warn"}">Mangler</span>`}</td>`;
+    const admin = S.admin ? `<div class="adminbox"><h3>Styret: frist, rapport og låsing</h3>
+      ${per ? `<div class="row" style="margin-bottom:12px"><label for="fristInp">Frist for ${PERIODER[S.period].navn.toLowerCase()}:</label>
+        <input id="fristInp" type="date" value="${fristFor(per) || ""}"><button class="btn ghost sm" data-act="frist">Lagre frist</button></div>
+        <p class="status" style="margin-top:0">${PERIODER[S.period].navn} ${S.year} er ${erLaast ? "låst. Ingen kan endre registreringer." : "åpen for registrering."}</p>
+        <div class="row">${erLaast ? `<button class="btn" data-act="csv">Last ned rapport</button><button class="btn warn" data-act="opp">Lås opp</button>`
+          : `<button class="btn" data-act="csvlaas">Lås og last ned rapport</button><button class="btn ghost" data-act="csv">Last ned uten å låse</button>`}</div>
+        ${kanBekrefte(per) && antOk < ANTALL_ENHETER ? `<div class="row" style="margin-top:10px"><button class="btn ghost" data-act="purr">Kopier purretekst (${ANTALL_ENHETER - antOk} enheter)</button></div>` : ""}`
+      : `<div class="row"><button class="btn" data-act="csv">Last ned rapport for hele året</button></div>`}</div>` : "";
+    return `<div class="panel">${yearbar()}
+      <div class="row" style="justify-content:space-between"><div class="lockbar">${["H1","H2"].map(h => { const on = S.laast.has(`${S.year}-${h}`);
+          return `<span class="${on?"on":""}">${HALV[h]}: ${on?"låst 🔒":"åpen"}</span>`; }).join("")}</div>
+        <select id="periodSel" aria-label="Periode">${Object.entries(PERIODER).map(([k,v])=>`<option value="${k}" ${k===S.period?"selected":""}>${v.navn}</option>`).join("")}</select></div>
+      <p class="status"><b>${antOk} av ${ANTALL_ENHETER}</b> har bekreftet ${S.period === "aar" ? "begge halvår" : PERIODER[S.period].navn.toLowerCase()} ${S.year}.${per && fristFor(per) ? ` Frist: ${dato(fristFor(per))}.` : ""}</p>
+      <div class="progress"><i style="width:${Math.round(antOk/ANTALL_ENHETER*100)}%"></i></div>
+      ${admin}
+      <div class="scroll"><table>
+        <thead><tr><th>Enhet</th><th>Status</th><th class="num">Lav</th><th class="num">Høy</th><th class="num">Sum</th><th class="ukecol">Uker</th></tr></thead>
+        <tbody>${rows.map(r => `<tr class="click${S.aapen === r.n ? " open" : ""}" data-unit="${r.n}" tabindex="0" aria-expanded="${S.aapen === r.n}"><td>${r.n}</td>${statusCell(r)}<td class="num">${r.lav}</td><td class="num">${r.hoy}</td><td class="num">${kr(r.total)}</td><td class="ukecol">${r.weeks.join(", ")}</td></tr>`
+          + (S.aapen === r.n ? `<tr class="detail"><td colspan="6">Enhet ${r.n}${navnFor(r.n) ? ` (${esc(navnFor(r.n))})` : ""}, ${PERIODER[S.period].navn.toLowerCase()} ${S.year}: ${r.weeks.length ? "uke " + r.weeks.join(", ") : "ingen uker registrert"}.${S.admin ? ` <button class="btn ghost sm" data-edit="${r.n}">Rediger enhet</button>` : ""}</td></tr>` : "")).join("")}</tbody>
+        <tfoot><tr><td>Totalt</td><td></td><td class="num">${t.lav}</td><td class="num">${t.hoy}</td><td class="num">${kr(t.total)}</td><td class="ukecol"></td></tr></tfoot>
+      </table></div><p class="status">Trykk på en enhet for å se ukene.</p>${statusEl()}</div>`;
+  }
+
+  function render(){
+    let body;
+    if (S.loading) body = `<p>Laster …</p>`;
+    else if (S.tab === "status") body = statusView();
+    else if (S.tab === "over") body = oversiktView();
+    else if (S.kandidat) body = bekreftEnhetView();
+    else if (!S.enhet) body = velgView();
+    else body = minHytteView();
+    app.innerHTML = header() + body;
+  }
+
+  // ---------- Rapport ----------
+  async function lastNedCsv(){
+    const p = PERIODER[S.period].navn, rows = unitRows();
+    const lines = [["Enhet","Eier","Periode","Uker lavsesong","Uker høysesong","Beløp lavsesong (kr)","Beløp høysesong (kr)","Sum (kr)","Ukenummer","Bekreftet av enhet"].join(";")];
+    rows.forEach(r => lines.push([r.n, navnFor(r.n).replace(/;/g, ","), `${p} ${S.year}`, r.lav, r.hoy, r.krLav, r.krHoy, r.total, r.weeks.join(", "),
+      S.period === "aar" ? `H1: ${r.b1 ? dato(r.b1) : "nei"}, H2: ${r.b2 ? dato(r.b2) : "nei"}` : (r.ok ? dato(S.period === "H1" ? r.b1 : r.b2) : "nei")].join(";")));
+    const t = rows.reduce((a,r)=>({lav:a.lav+r.lav,hoy:a.hoy+r.hoy,krLav:a.krLav+r.krLav,krHoy:a.krHoy+r.krHoy,total:a.total+r.total}),{lav:0,hoy:0,krLav:0,krHoy:0,total:0});
+    lines.push(["Totalt","","",t.lav,t.hoy,t.krLav,t.krHoy,t.total,"",""].join(";"));
+    const blob = new Blob(["\uFEFF" + lines.join("\r\n")], {type:"text/csv;charset=utf-8"});
+    const filename = `arossanden-utleie-${S.year}-${S.period}.csv`;
+    if (window.claude){
+      try { const dl = await claude.use("downloads"); if (dl){ await dl.save({ filename, data:blob }); return; } } catch(e){ if (e && (e.code==="cancelled"||e.code==="declined")) return; }
+    }
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  async function settLaas(laast){
+    const { data, error } = await sb.rpc("sett_laas", { p_nokkel:adminKey, p_periode:`${S.year}-${S.period}`, p_laast:laast });
+    if (error || !data){ setStatus("Kunne ikke endre låsing: " + (error ? error.message : "ugyldig admin-nøkkel"), true); return false; }
+    await lastData(); return true;
+  }
+  function velgStandardHalv(n){
+    const m = mangler(n);
+    return m.length ? gaaTil(m[0].y, m[0].h) : gaaTil(naaAar, naaHalv);
+  }
+
+  // ---------- Hendelser ----------
+  app.addEventListener("click", async e => {
+    const t = e.target.closest("button, tr[data-unit]"); if (!t || t.disabled) return;
+    if (t.dataset.tab){ S.tab = t.dataset.tab; S.kandidat = null; setStatus(""); render(); window.scrollTo(0,0); return; }
+    if (t.dataset.year){ const y = S.year + Number(t.dataset.year); if (y < FORSTE_AAR) return; setStatus(""); await gaaTil(y, S.half); return; }
+    if (t.dataset.half){ S.half = t.dataset.half; S.bekreftSteg = null; render(); return; }
+    if (t.dataset.goto){ const [y,h] = t.dataset.goto.split("-"); await gaaTil(Number(y), h); return; }
+    if (t.dataset.pick){ S.kandidat = Number(t.dataset.pick); render(); window.scrollTo(0,0); return; }
+    if (t.dataset.edit){ S.enhet = Number(t.dataset.edit); S.aapen = null; if (S.period !== "aar") S.half = S.period; S.tab = "min"; setStatus(""); render(); window.scrollTo(0,0); return; }
+    if (t.dataset.unit){ const n = Number(t.dataset.unit); S.aapen = S.aapen === n ? null : n; render(); return; }
+    if (t.dataset.wk){
+      const k = t.dataset.wk, info = infoFor(k);
+      if (S.laast.has(info.periode)){ toast("🔒 Perioden er lukket etter rapportering. Mener du noe er feil, kontakt styret eller regnskapsfører.", "warn"); return; }
+      if (bekreftet(S.enhet, info.periode)){ toast("🔒 Perioden er lukket fordi halvåret er bekreftet. Mener du noe er feil, kontakt styret eller regnskapsfører.", "warn"); return; }
+      const had = ukerFor(S.enhet).has(k);
+      if (had) S.rader = S.rader.filter(r => !(r.enhet === S.enhet && r.uke === k)); else S.rader.push({ enhet:S.enhet, uke:k });
+      S.bekreftSteg = null; render();
+      const { error } = had ? await sb.from("utleie").delete().eq("enhet", S.enhet).eq("uke", k) : await sb.from("utleie").insert({ enhet:S.enhet, uke:k });
+      if (error && error.code !== "23505"){
+        await lastData(); render();
+        toast(/row-level security/i.test(error.message) ? "🔒 Perioden er lukket. Mener du noe er feil, kontakt styret eller regnskapsfører." : "Ikke lagret. Sjekk nettforbindelsen og prøv igjen.", "warn");
+      } else toast(had ? `Uke ${info.w} er fjernet` : `✓ Uke ${info.w} er lagret som utleid`, had ? "" : "ok");
+      return;
+    }
+    const act = t.dataset.act;
+    if (act === "velg"){
+      const n = S.kandidat; S.enhet = n; S.kandidat = null;
+      if (!S.admin) try { localStorage.setItem("arossanden-enhet", String(n)); } catch(e){}
+      await velgStandardHalv(n); return;
+    }
+    if (act === "tilbake"){ S.kandidat = null; render(); return; }
+    if (act === "bytt"){ S.enhet = null; S.kandidat = null; if (!S.admin) try { localStorage.removeItem("arossanden-enhet"); } catch(e){} render(); window.scrollTo(0,0); return; }
+    if (act === "steg"){ S.bekreftSteg = t.dataset.per; render(); document.getElementById("bekreft")?.scrollIntoView({block:"center"}); return; }
+    if (act === "avbryt"){ S.bekreftSteg = null; render(); return; }
+    if (act === "bekreft" || act === "angre"){
+      const per = t.dataset.per; S.bekreftSteg = null;
+      let { error, data } = act === "bekreft"
+        ? await sb.from("bekreftelser").insert({ enhet:S.enhet, periode:per })
+        : await sb.rpc("angre_bekreftelse", { p_nokkel:adminKey, p_enhet:S.enhet, p_periode:per });
+      if (act === "angre" && !error && data !== true) error = { message:"Ikke tillatt" };
+      await lastData(); render();
+      if (error && error.code !== "23505") toast(/row-level security/i.test(error.message) ? "Ikke mulig: halvåret er låst eller ikke over ennå." : "Ikke lagret: " + error.message, "warn");
+      else toast(act === "bekreft" ? "✓ Takk! Halvåret er bekreftet." : "Halvåret er åpnet for endring.", "ok");
+      document.getElementById("bekreft")?.scrollIntoView({block:"center"});
+      return;
+    }
+    if (act === "rolle"){ S.admin = !S.admin; S.tab = S.admin ? "over" : "min"; S.enhet = S.admin ? null : lagretEnhet(); S.kandidat = null; setStatus(""); render(); return; }
+    if (act === "nullstill"){ if (confirm("Slette alle testdata og starte på nytt?")) window.__demoReset(); return; }
+    if (act === "csv"){ await lastNedCsv(); return; }
+    if (act === "frist"){
+      const v = document.getElementById("fristInp").value || null;
+      const { data, error } = await sb.rpc("sett_frist", { p_nokkel:adminKey, p_periode:`${S.year}-${S.period}`, p_frist:v });
+      if (error || !data) setStatus("Kunne ikke lagre frist: " + (error ? error.message : "ugyldig admin-nøkkel"), true);
+      else { setStatus(v ? `Frist satt til ${dato(v)}. Den vises for alle enheter.` : "Frist fjernet."); await lastData(); }
+      render(); return;
+    }
+    if (act === "csvlaas"){
+      if (!confirm(`Låse ${PERIODER[S.period].navn} ${S.year}? Ingen kan deretter endre registreringer i perioden.`)) return;
+      if (await settLaas(true)){ setStatus(`${PERIODER[S.period].navn} ${S.year} er låst. Rapporten er lastet ned.`); render(); await lastNedCsv(); } else render();
+      return;
+    }
+    if (act === "opp"){
+      if (!confirm(`Låse opp ${PERIODER[S.period].navn} ${S.year}? Alle kan da endre registreringer i perioden igjen.`)) return;
+      if (await settLaas(false)) setStatus("Perioden er låst opp.");
+      render(); return;
+    }
+    if (act === "purr"){
+      const mangl = unitRows().filter(r => !r.ok).map(r => r.n), per = `${S.year}-${S.period}`;
+      const txt = `Hei!\n\nFølgende enheter har ikke bekreftet utleie for ${PERIODER[S.period].navn.toLowerCase()} ${S.year}:\n${mangl.map(n => "Enhet " + n).join(", ")}\n\n${fristFor(per) ? `Fristen er ${dato(fristFor(per))}. ` : ""}Trykk på lenken, velg din hytte, sjekk ukene og trykk den grønne knappen «Bekreft»:\n${location.origin}${location.pathname}\n\nHilsen styret i Årossanden`;
+      try { await navigator.clipboard.writeText(txt); setStatus("Purreteksten er kopiert. Lim inn i e-post, SMS eller Facebook."); }
+      catch(e){ setStatus("Kunne ikke kopiere automatisk. Tekst:\n" + txt); }
+      render(); return;
+    }
+  });
+  app.addEventListener("change", e => { if (e.target.id === "periodSel"){ S.period = e.target.value; S.aapen = null; setStatus(""); render(); } });
+  app.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.matches("tr[data-unit]")) e.target.click(); });
+
+  (async () => {
+    if (adminKey && !DEMO){
+      const { data } = await sb.rpc("admin_ok", { p_nokkel:adminKey });
+      S.admin = data === true;
+      if (S.admin){ S.tab = "over"; S.enhet = null; }
+    }
+    await oppdater();
+    if (S.enhet && !S.admin) await velgStandardHalv(S.enhet);
+  })();
+})();
+</script>
+</body>
+</html>
