@@ -1,0 +1,14 @@
+{
+  "name": "Årossanden utleie",
+  "short_name": "Årossanden",
+  "description": "Registrer utleie for din hytte i Årossanden.",
+  "lang": "no",
+  "display": "standalone",
+  "background_color": "#EEF3F4",
+  "theme_color": "#1F6A8A",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
