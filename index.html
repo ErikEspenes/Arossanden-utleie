@@ -460,7 +460,7 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
         ${window.__DEMO_ADMIN ? `<button class="btn sm ${S.admin ? "" : "ghost"}" data-demo="styret">Styret</button>` : ""}</div>
         <div class="row" style="margin-top:6px"><button class="linkbtn" data-act="nullstill">Start testen på nytt</button></div></div>`;
     }
-    const ugyldig = adminKey && !DEMO && !S.admin && !S.loading ? `<div class="banner">Admin-lenken er ikke gyldig.</div>` : "";
+    const ugyldig = adminKey && !DEMO && !S.admin && !S.loading ? `<div class="banner"><b>Admin-lenken virker ikke.</b><br>${esc(S.adminFeil || "Ukjent årsak.")}</div>` : "";
     const aktiv = S.admin && S.tab === "min" ? "over" : S.tab;
     const tab = (id, t, sub) => `<button role="tab" data-tab="${id}" aria-selected="${aktiv===id}">${t}<small>${sub}</small></button>`;
     const faner = S.admin
@@ -970,6 +970,14 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
       // Ingen egen «riktig/feil nøkkel»-funksjon: admin_eiere gir null ved feil nøkkel
       const { data, error } = await sb.rpc("admin_eiere", { p_nokkel:adminKey });
       S.admin = !error && Array.isArray(data);
+      if (!S.admin){
+        const k = adminKey.trim();
+        S.adminFeil = error
+          ? `Databasen svarte med feil: ${error.message}${error.code ? " (kode " + error.code + ")" : ""}`
+          : !/^[0-9a-f]{64}$/i.test(k)
+            ? `Nøkkelen i lenken har ${k.length} tegn${/[^0-9a-f]/i.test(k) ? " og inneholder tegn som ikke hører hjemme" : ""}. Den skal være nøyaktig 64 tegn (0–9 og a–f), uten «NOKKEL:» foran.`
+            : "Nøkkelen har riktig format, men stemmer ikke med hashen som er lagret i Supabase. Nøkkel og hash er trolig fra to forskjellige kjøringer.";
+      }
       if (S.admin) S.tab = "over";
     }
     if (!S.admin && S.token) await loggInnEier(S.token);
