@@ -1,0 +1,32 @@
+# Holder Supabase-prosjektet aktivt (gratisnivået pauses ved lite aktivitet).
+# Kjører mandag og torsdag kl. 06:17 UTC, og kan startes manuelt under Actions.
+# Adressen og nøkkelen under er de samme offentlige verdiene som står i index.html.
+name: Hold Supabase aktiv
+
+on:
+  schedule:
+    - cron: "17 6 * * 1,4"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Spør databasen
+        env:
+          SUPABASE_URL: "https://pczsmrjdhmpqzkzumdfa.supabase.co"
+          SUPABASE_KEY: "sb_publishable_c-0P6CENIWqFfImXj4N6aw_IJtcFC7h"
+        run: |
+          status=$(curl -s -o svar.txt -w "%{http_code}" --max-time 30 \
+            "$SUPABASE_URL/rest/v1/laaste_perioder?select=periode&limit=1" \
+            -H "apikey: $SUPABASE_KEY")
+          echo "HTTP-status: $status"
+          cat svar.txt; echo
+          if [ "$status" != "200" ]; then
+            echo "::error::Supabase svarte ikke som forventet (HTTP $status). Sjekk om prosjektet er pauset."
+            exit 1
+          fi
