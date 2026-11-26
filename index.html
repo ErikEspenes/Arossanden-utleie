@@ -246,6 +246,10 @@ td small.cn{display:block;font-size:.75rem;color:var(--muted);white-space:normal
 .unitbtn span{display:block}
 a.btn{text-decoration:none}
 #eierSok{margin-bottom:4px}
+.prisrad{grid-column:2 / -1;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px}
+.prisrad label{display:flex;flex-direction:column;font-size:.8rem;color:var(--muted);gap:2px}
+.prisrad .txt{min-height:42px}
+.navnliste{grid-template-columns:repeat(auto-fill,minmax(280px,1fr));row-gap:14px}
 </style>
 </head>
 <body>
@@ -255,7 +259,7 @@ a.btn{text-decoration:none}
 const SUPABASE_URL      = "https://pczsmrjdhmpqzkzumdfa.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_c-0P6CENIWqFfImXj4N6aw_IJtcFC7h";
 const ANTALL_ENHETER    = 47;
-const PRIS_LAV = 250, PRIS_HOY = 750;
+const PRIS_LAV = 250, PRIS_HOY = 750;   // standardpris per uke. Kan overstyres per enhet i admin
 const HOY_MND  = [5, 6, 7];   // juni, juli, august
 const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
 // ============================================================
@@ -326,17 +330,18 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
     const y = d.getUTCFullYear(), w = 1+Math.round((d-week1Monday(y)-3*864e5)/6048e5);
     return `${y}-${String(w).padStart(2,"0")}`;
   }
-  function sum(keys, filter){
+  function sum(keys, filter, n){
+    const p = n ? prisFor(n) : { lav:PRIS_LAV, hoy:PRIS_HOY };
     let lav=0, hoy=0;
     for (const k of keys){ const i = infoFor(k); if (!i || (filter && !filter(i))) continue; i.high ? hoy++ : lav++; }
-    return { lav, hoy, krLav:lav*PRIS_LAV, krHoy:hoy*PRIS_HOY, total:lav*PRIS_LAV+hoy*PRIS_HOY };
+    return { lav, hoy, krLav:lav*p.lav, krHoy:hoy*p.hoy, total:lav*p.lav+hoy*p.hoy };
   }
 
   // ---------- Tilstand ----------
   const iDag = new Date(), naaAar = Math.max(iDag.getFullYear(), FORSTE_AAR), naaHalv = iDag.getMonth() <= 5 ? "H1" : "H2";
   const S = { loading:true, admin:false, token:hent("arossanden-nokkel"), eier:null, tokenUgyldig:false,
     tab:"min", enhet:null, year:naaAar, half:naaHalv,
-    rader:[], laast:new Set(), bekr:new Map(), frister:new Map(), navn:new Map(), eierePr:new Map(), adresse:new Map(), eierSok:"", enhetsnavn:new Map(), visEnhetsnavn:false, eiere:[],
+    rader:[], laast:new Set(), bekr:new Map(), frister:new Map(), navn:new Map(), eierePr:new Map(), adresse:new Map(), pris:new Map(), eierSok:"", enhetsnavn:new Map(), visEnhetsnavn:false, eiere:[],
     period:iDag.getMonth()>=6 ? "H1" : "H2", aapen:null, bekreftSteg:null, status:"", err:false,
     logg:[], loggEnhet:"", redigerEier:null, visInstall:false, visQR:null, utskrift:false, demoEiere:[] };
   const setStatus = (m, err=false) => { S.status = m; S.err = err; };
@@ -351,11 +356,12 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
       sb.from("laaste_perioder").select("periode"),
       hentAlle(() => sb.from("bekreftelser").select("enhet,periode,bekreftet")),
       sb.from("frister").select("periode,frist"),
-      sb.from("enhetsnavn").select("enhet,navn,adresse")
+      sb.from("enhetsnavn").select("enhet,navn,adresse,pris_lav,pris_hoy")
     ]);
     for (const r of [l, fr, en]) if (r.error) throw r.error;
     S.enhetsnavn = new Map(en.data.filter(x => x.navn).map(x => [x.enhet, x.navn]));
     S.adresse = new Map(en.data.filter(x => x.adresse).map(x => [x.enhet, x.adresse]));
+    S.pris = new Map(en.data.filter(x => x.pris_lav != null || x.pris_hoy != null).map(x => [x.enhet, { lav:x.pris_lav, hoy:x.pris_hoy }]));
     S.laast = new Set(l.data.map(x => x.periode));
     S.bekr = new Map(b.map(x => [`${x.enhet}|${x.periode}`, x.bekreftet]));
     S.frister = new Map(fr.data.map(x => [x.periode, x.frist]));
@@ -401,6 +407,8 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
   const rolleTxt = r => r === "hovedeier" ? "kontaktperson" : r;   // intern verdi «hovedeier» vises som «kontaktperson»
   const medFor = n => eiereFor(n).filter(x => x.rolle === "medeier");
   const adr = n => S.adresse.get(n) || "";
+  // Pris per uke for en enhet: egen pris hvis satt, ellers standard
+  function prisFor(n){ const p = S.pris.get(n) || {}; return { lav:p.lav ?? PRIS_LAV, hoy:p.hoy ?? PRIS_HOY, egen:p.lav != null || p.hoy != null }; }
   const tlf = m => !m ? "" : m.length === 8 ? `${m.slice(0,3)} ${m.slice(3,5)} ${m.slice(5)}` : m;
   const kontaktHtml = x => [x.epost ? `<a href="mailto:${esc(x.epost)}">${esc(x.epost)}</a>` : "", x.mobil ? `<a href="tel:+47${esc(x.mobil)}">${esc(tlf(x.mobil))}</a>` : ""].filter(Boolean).join(" · ");
   const en = n => S.enhetsnavn.get(n) || `Enhet ${n}`;          // fullt navn
@@ -541,7 +549,7 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
     const n = S.enhet, uker = ukerFor(n), per = `${S.year}-${S.half}`;
     const now = currentKey(), weeks = weeksOf(S.year);
     const ms = S.half === "H1" ? [0,1,2,3,4,5] : [6,7,8,9,10,11];
-    const t = sum([...uker], i => i.periode === per);
+    const t = sum([...uker], i => i.periode === per, n);
     const manglerListe = mangler(n);
     const andre = flereEnheter() ? S.eier.enheter.filter(x => x !== n && mangler(x).length) : [];
     const varsel = manglerListe.length || andre.length ? `<div class="alert">
@@ -552,7 +560,7 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
     const halvKnapp = h => { const p = `${S.year}-${h}`, b = bekreftet(n, p);
       const st = b ? `<em class="ok">✓ Bekreftet</em>` : kanBekrefte(p) && !S.laast.has(p) ? `<em class="miss">Må bekreftes</em>` : S.laast.has(p) ? `<em>🔒 Låst</em>` : `<em>Pågår</em>`;
       return `<button data-half="${h}" aria-pressed="${S.half===h}"><b>${HALV[h]}</b><span>${HALV_MND[h]}</span>${st}</button>`; };
-    const maaned = m => `<section class="month"><h3>${MND[m]}${HOY_MND.includes(m) ? `<small class="hi">Høysesong · ${PRIS_HOY} kr/uke</small>` : `<small>Lavsesong · ${PRIS_LAV} kr/uke</small>`}</h3>
+    const maaned = m => `<section class="month"><h3>${MND[m]}${HOY_MND.includes(m) ? `<small class="hi">Høysesong · ${prisFor(n).hoy} kr/uke</small>` : `<small>Lavsesong · ${prisFor(n).lav} kr/uke</small>`}</h3>
       <div class="weeks">${weeks.filter(w => w.month === m).map(w => {
         const on = uker.has(w.key), closed = S.laast.has(w.periode) || !!bekreftet(n, w.periode);
         return `<button class="wk${on?" on":""}${w.high?" high":""}${w.key===now?" now":""}${closed?" closed":""}" data-wk="${w.key}" aria-pressed="${on}" ${closed?'aria-disabled="true"':""}
@@ -614,7 +622,7 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
       const weeks = keys.filter(k => { const i = infoFor(k); return i && f(i); }).sort().map(k => Number(k.split("-")[1]));
       const b1 = bekreftet(n, `${S.year}-H1`), b2 = bekreftet(n, `${S.year}-H2`);
       const ok = S.period === "H1" ? !!b1 : S.period === "H2" ? !!b2 : (!!b1 && !!b2);
-      rows.push({ n, ...sum(keys, f), weeks, b1, b2, ok });
+      rows.push({ n, ...sum(keys, f, n), weeks, b1, b2, ok });
     }
     return rows;
   }
@@ -648,6 +656,7 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
         <tbody>${rows.map(r => `<tr class="click${S.aapen === r.n ? " open" : ""}" data-unit="${r.n}" tabindex="0" aria-expanded="${S.aapen === r.n}"><td><b>${r.n}</b>${S.enhetsnavn.has(r.n) ? `<small class="cn">${esc(S.enhetsnavn.get(r.n))}</small>` : ""}</td>${statusCell(r)}<td class="num">${r.lav}</td><td class="num">${r.hoy}</td><td class="num">${kr(r.total)}</td><td class="ukecol">${r.weeks.join(", ")}</td></tr>`
           + (S.aapen === r.n ? `<tr class="detail"><td colspan="6"><b>${esc(en(r.n))}</b>${adr(r.n) ? `, ${esc(adr(r.n))}` : ""}
             ${eiereFor(r.n).length ? eiereFor(r.n).map(x => `<span class="kline">${esc(x.navn)} <small>(${rolleTxt(x.rolle)})</small>: ${kontaktHtml(x) || "ingen kontaktinfo"}</span>`).join("") : `<span class="kline">Ingen eier registrert</span>`}
+            <span class="kline">Pris per uke: lavsesong ${prisFor(r.n).lav} kr, høysesong ${prisFor(r.n).hoy} kr${prisFor(r.n).egen ? "" : " (standard)"}</span>
             <span class="kline">${PERIODER[S.period].navn} ${S.year}: ${r.weeks.length ? "uke " + r.weeks.join(", ") : "ingen uker registrert"}</span>
             <button class="btn ghost sm" data-edit="${r.n}">Rediger enhet</button></td></tr>` : "")).join("")}</tbody>
         <tfoot><tr><td>Totalt</td><td></td><td class="num">${t.lav}</td><td class="num">${t.hoy}</td><td class="num">${kr(t.total)}</td><td class="ukecol"></td></tr></tfoot>
@@ -676,9 +685,12 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
     const rader = Array.from({length:ANTALL_ENHETER}, (_,i) => { const n = i+1;
       return `<div class="navnrad"><label for="en${n}"><b>${n}</b></label>
         <input id="en${n}" class="txt" type="text" maxlength="40" value="${esc(S.enhetsnavn.get(n) || "")}" placeholder="Enhet ${n}" autocomplete="off" aria-label="Navn enhet ${n}">
-        <input id="ea${n}" class="txt" type="text" maxlength="60" value="${esc(S.adresse.get(n) || "")}" placeholder="Adresse" autocomplete="off" aria-label="Adresse enhet ${n}"></div>`; }).join("");
-    return `<div class="hbox open" id="navneskjema" style="margin-top:0;margin-bottom:16px"><h4>Navn og adresse på enheter</h4>
+        <input id="ea${n}" class="txt" type="text" maxlength="60" value="${esc(S.adresse.get(n) || "")}" placeholder="Adresse" autocomplete="off" aria-label="Adresse enhet ${n}">
+        <div class="prisrad"><label>Lav kr/uke<input id="pl${n}" class="txt" type="text" inputmode="numeric" maxlength="5" value="${S.pris.get(n)?.lav ?? ""}" placeholder="${PRIS_LAV}" aria-label="Pris lavsesong enhet ${n}"></label>
+          <label>Høy kr/uke<input id="ph${n}" class="txt" type="text" inputmode="numeric" maxlength="5" value="${S.pris.get(n)?.hoy ?? ""}" placeholder="${PRIS_HOY}" aria-label="Pris høysesong enhet ${n}"></label></div></div>`; }).join("");
+    return `<div class="hbox open" id="navneskjema" style="margin-top:0;margin-bottom:16px"><h4>Navn, adresse og pris per enhet</h4>
       <p>Navnet vises for eierne, i status, oversikt, QR-ark og rapport. Tomt navn gir standard («Enhet 12»). Nummeret til venstre er seksjonsnummeret og endres ikke.</p>
+      <p><b>Pris per uke:</b> tomt felt gir standardpris (lavsesong ${PRIS_LAV} kr, høysesong ${PRIS_HOY} kr). Beløp i oversikt og rapport beregnes alltid med prisen som står her nå.</p>
       <div class="navnliste">${rader}</div>
       <div class="row" style="margin-top:14px"><button class="btn green" data-act="lagrenavn">Lagre alle</button><button class="btn ghost" data-act="enhetsnavn">Avbryt</button></div></div>`;
   }
@@ -709,7 +721,7 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
     return `<div class="panel"><div class="row" style="justify-content:space-between"><h2>Eiere og innlogging</h2>
         <div class="row"><button class="btn green sm" data-act="nyeier">+ Ny eier</button>${S.eiere.length ? `<button class="btn ghost sm" data-act="utskrift">Skriv ut QR-ark</button><button class="btn ghost sm" data-act="alleepost">Kopier alle e-poster</button>` : ""}</div></div>
       <p class="intro">Hver eier (kontaktperson og medeier) får en personlig lenke og QR-kode. Den gir kun tilgang til eierens egne enheter. «Ny lenke» gjør den gamle ugyldig, f.eks. ved eierskifte.</p>
-      <div class="row" style="margin-bottom:12px"><button class="btn ${S.visEnhetsnavn ? "" : "ghost"} sm" data-act="enhetsnavn">✏️ Navn og adresse på enheter</button></div>
+      <div class="row" style="margin-bottom:12px"><button class="btn ${S.visEnhetsnavn ? "" : "ghost"} sm" data-act="enhetsnavn">✏️ Navn, adresse og pris per enhet</button></div>
       ${S.visEnhetsnavn ? enhetsnavnSkjema() : ""}
       ${uten.length ? `<p class="alertline">Enheter uten eier (${uten.length}): ${esc(uten.join(", "))}</p>` : `<p class="okline">✓ Alle ${ANTALL_ENHETER} enheter har eier. ${S.eiere.length} eiere registrert.</p>`}
       ${S.redigerEier ? eierSkjema() : ""}
@@ -730,7 +742,7 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
 
   // ---------- Logg (styret) ----------
   const HANDLING = { "lagt til":"Uke registrert", "fjernet":"Uke fjernet", "bekreftet":"Halvår bekreftet", "bekreftelse angret":"Halvår åpnet av styret",
-    "låst":"Halvår låst (rapport)", "enhetsnavn oppdatert":"Navn og adresse på enheter oppdatert", "eiere importert":"Eierliste importert", "låst opp":"Halvår låst opp", "frist fjernet":"Frist fjernet" };
+    "låst":"Halvår låst (rapport)", "enhetsnavn oppdatert":"Navn, adresse og pris på enheter oppdatert", "eiere importert":"Eierliste importert", "låst opp":"Halvår låst opp", "frist fjernet":"Frist fjernet" };
   function hvaTekst(u){
     if (!u) return "";
     if (/^\d{4}-\d{2}$/.test(u)){ const i = infoFor(u); return `uke ${i.w} (${i.label}, ${u.slice(0,4)})`; }
@@ -740,6 +752,7 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
   function loggTekst(l){
     const h = l.handling || "", hva = hvaTekst(l.uke);
     if (h.startsWith("frist satt: ")) return `Frist for ${hva} satt til ${h.slice(12)}`;
+    if (h.startsWith("pris endret: ")) return `Pris endret: ${h.slice(13)}`;
     if (h.startsWith("eier lagret: ")) return `Eier lagret: ${h.slice(13).replace(/hovedeier/g, "kontaktperson")}`;
     if (h.startsWith("eier slettet: ")) return `Eier slettet: ${h.slice(14)}`;
     if (h.startsWith("ny lenke laget: ")) return `Ny lenke laget for ${h.slice(16)}`;
@@ -780,12 +793,12 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
   // ---------- Rapport ----------
   async function lastNedCsv(){
     const p = PERIODER[S.period].navn, rows = unitRows();
-    const lines = [["Enhet nr","Enhet","Adresse","Kontaktperson","E-post kontaktperson","Medeier","Periode","Uker lavsesong","Uker høysesong","Beløp lavsesong (kr)","Beløp høysesong (kr)","Sum (kr)","Ukenummer","Bekreftet av enhet"].join(";")];
+    const lines = [["Enhet nr","Enhet","Adresse","Kontaktperson","E-post kontaktperson","Medeier","Pris lav (kr/uke)","Pris høy (kr/uke)","Periode","Uker lavsesong","Uker høysesong","Beløp lavsesong (kr)","Beløp høysesong (kr)","Sum (kr)","Ukenummer","Bekreftet av enhet"].join(";")];
     const c = v => String(v || "").replace(/;/g, ",");
-    rows.forEach(r => lines.push([r.n, c(en(r.n)), c(adr(r.n)), c(hovedFor(r.n).map(x => x.navn).join(" og ")), c(hovedFor(r.n).map(x => x.epost).filter(Boolean).join(", ")), c(medFor(r.n).map(x => x.navn).join(" og ")), `${p} ${S.year}`, r.lav, r.hoy, r.krLav, r.krHoy, r.total, r.weeks.join(", "),
+    rows.forEach(r => lines.push([r.n, c(en(r.n)), c(adr(r.n)), c(hovedFor(r.n).map(x => x.navn).join(" og ")), c(hovedFor(r.n).map(x => x.epost).filter(Boolean).join(", ")), c(medFor(r.n).map(x => x.navn).join(" og ")), prisFor(r.n).lav, prisFor(r.n).hoy, `${p} ${S.year}`, r.lav, r.hoy, r.krLav, r.krHoy, r.total, r.weeks.join(", "),
       S.period === "aar" ? `H1: ${r.b1 ? dato(r.b1) : "nei"}, H2: ${r.b2 ? dato(r.b2) : "nei"}` : (r.ok ? dato(S.period === "H1" ? r.b1 : r.b2) : "nei")].join(";")));
     const t = rows.reduce((a,r)=>({lav:a.lav+r.lav,hoy:a.hoy+r.hoy,krLav:a.krLav+r.krLav,krHoy:a.krHoy+r.krHoy,total:a.total+r.total}),{lav:0,hoy:0,krLav:0,krHoy:0,total:0});
-    lines.push(["Totalt","","","","","","",t.lav,t.hoy,t.krLav,t.krHoy,t.total,"",""].join(";"));
+    lines.push(["Totalt","","","","","","","","",t.lav,t.hoy,t.krLav,t.krHoy,t.total,"",""].join(";"));
     const blob = new Blob(["\uFEFF" + lines.join("\r\n")], {type:"text/csv;charset=utf-8"});
     const filename = `arossanden-utleie-${S.year}-${S.period}.csv`;
     if (window.claude){
@@ -883,13 +896,17 @@ const FORSTE_AAR = 2026;      // registrering fra 01.01.2026
     }
     if (act === "enhetsnavn"){ S.visEnhetsnavn = !S.visEnhetsnavn; render(); if (S.visEnhetsnavn) document.getElementById("navneskjema")?.scrollIntoView({block:"start"}); return; }
     if (act === "lagrenavn"){
-      const liste = Array.from({length:ANTALL_ENHETER}, (_,i) => ({ enhet:i+1, navn:(document.getElementById("en" + (i+1))?.value || "").trim(), adresse:(document.getElementById("ea" + (i+1))?.value || "").trim() }));
+      const tall = id => { const v = (document.getElementById(id)?.value || "").replace(/\s/g, ""); return v === "" ? null : (/^\d{1,5}$/.test(v) ? Number(v) : NaN); };
+      const liste = Array.from({length:ANTALL_ENHETER}, (_,i) => ({ enhet:i+1, navn:(document.getElementById("en" + (i+1))?.value || "").trim(), adresse:(document.getElementById("ea" + (i+1))?.value || "").trim(),
+        pris_lav:tall("pl" + (i+1)), pris_hoy:tall("ph" + (i+1)) }));
+      const feilPris = liste.filter(x => Number.isNaN(x.pris_lav) || Number.isNaN(x.pris_hoy)).map(x => x.enhet);
+      if (feilPris.length){ toast(`Pris må være et helt tall i kroner (0–99999). Sjekk enhet ${feilPris.join(", ")}.`, "warn"); return; }
       const like = new Map(); for (const x of liste) if (x.navn){ const k = x.navn.toLowerCase(); like.set(k, (like.get(k) || []).concat(x.enhet)); }
       const dobbel = [...like.values()].filter(v => v.length > 1);
       if (dobbel.length){ toast(`To enheter kan ikke ha samme navn (nr. ${dobbel[0].join(" og ")}).`, "warn"); return; }
       const { data, error } = await sb.rpc("sett_enhetsnavn", { p_nokkel:adminKey, p_liste:liste });
       if (error || !data){ toast("Kunne ikke lagre: " + (error ? error.message : "ugyldig admin-nøkkel"), "warn"); return; }
-      S.visEnhetsnavn = false; await lastData(); render(); toast("✓ Navn og adresser er lagret", "ok"); return;
+      S.visEnhetsnavn = false; await lastData(); render(); toast("✓ Navn, adresser og priser er lagret", "ok"); return;
     }
     if (act === "visinstall"){ S.visInstall = true; render(); return; }
     if (act === "lukkinstall"){ S.visInstall = false; render(); return; }
